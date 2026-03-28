@@ -1,0 +1,32 @@
+name: SoKrutoiPowersPlugin
+version: 1.0
+main: org.sokrutoi.soKrutoiPowersPlugin.SoKrutoiPowersPlugin
+api-version: '1.21'
+description: Супер-силы для сервера SoKrutoi
+
+commands:
+  givepower:
+    description: Выдать суперсилу игроку
+    usage: /givepower <игрок> <суперсила>
+    permission: sokrutoi.givepower
+    tab-complete: true
+  clearpowers:
+    description: Очистить суперсилы у игрока
+    usage: /clearpowers <игрок|**>
+    permission: sokrutoi.clearpowers
+    tab-complete: true
+  whohaspowers:
+    description: Показать у кого какие суперсилы
+    usage: /whohaspowers
+    permission: sokrutoi.whohaspowers
+
+permissions:
+  sokrutoi.givepower:
+    description: Доступ к выдаче суперсил
+    default: op
+  sokrutoi.clearpowers:
+    description: Доступ к очистке суперсил
+    default: op
+  sokrutoi.whohaspowers:
+    description: Просмотр суперсил игроков
+    default: op
