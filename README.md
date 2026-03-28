@@ -12,4 +12,4 @@
 /clearpowers <Ник>/** (все) - Очистить способности
 /whohaspowers - Список игроков со способностями
 
-Вдохновлено суперспособностями c ([Freakland'а](https://t.me/freakland))
+Вдохновлено суперспособностями c [Freakland'а](https://t.me/freakland)
