@@ -15,10 +15,25 @@ commands:
     usage: /clearpowers <игрок|**>
     permission: sokrutoi.clearpowers
     tab-complete: true
+  resetpowers:
+    description: Сбросить активное состояние сил (кулдауны, невидимость, размер)
+    usage: /resetpowers <игрок|**>
+    permission: sokrutoi.resetpowers
+    tab-complete: true
   whohaspowers:
     description: Показать у кого какие суперсилы
     usage: /whohaspowers
     permission: sokrutoi.whohaspowers
+  setconfig:
+    description: Изменить параметр конфига плагина в реальном времени
+    usage: /setconfig <ключ> <значение>
+    permission: sokrutoi.setconfig
+    tab-complete: true
+  randompowers:
+    description: Случайно раздать суперсилы всем онлайн-игрокам
+    usage: /randompowers [сила1] [сила2] ...
+    permission: sokrutoi.randompowers
+    tab-complete: true
 
 permissions:
   sokrutoi.givepower:
@@ -27,6 +42,15 @@ permissions:
   sokrutoi.clearpowers:
     description: Доступ к очистке суперсил
     default: op
+  sokrutoi.resetpowers:
+    description: Доступ к сбросу состояния сил
+    default: op
   sokrutoi.whohaspowers:
     description: Просмотр суперсил игроков
+    default: op
+  sokrutoi.setconfig:
+    description: Изменение конфига плагина в игре
+    default: op
+  sokrutoi.randompowers:
+    description: Случайная раздача суперсил
     default: op

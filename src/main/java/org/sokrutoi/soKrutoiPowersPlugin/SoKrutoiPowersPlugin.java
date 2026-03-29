@@ -9,13 +9,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.sokrutoi.soKrutoiPowersPlugin.commands.ClearPowersCommand;
-import org.sokrutoi.soKrutoiPowersPlugin.commands.GivePowerCommand;
-import org.sokrutoi.soKrutoiPowersPlugin.powers.DeathNotePower;
-import org.sokrutoi.soKrutoiPowersPlugin.powers.ExplosionPower;
-import org.sokrutoi.soKrutoiPowersPlugin.powers.GiantPower;
-import org.sokrutoi.soKrutoiPowersPlugin.powers.InvisibilityPower;
-import org.sokrutoi.soKrutoiPowersPlugin.commands.WhoHasPowersCommand;
+import org.sokrutoi.soKrutoiPowersPlugin.commands.*;
+import org.sokrutoi.soKrutoiPowersPlugin.powers.*;
 
 import java.util.*;
 
@@ -42,6 +37,7 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
         powerManager.register(new InvisibilityPower(this));
         powerManager.register(new GiantPower(this));
         powerManager.register(new ExplosionPower(this));
+        powerManager.register(new ThiefPower(this));
 
         GivePowerCommand givePowerCmd = new GivePowerCommand(this);
         getCommand("givepower").setExecutor(givePowerCmd);
@@ -51,8 +47,20 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
         getCommand("clearpowers").setExecutor(clearCmd);
         getCommand("clearpowers").setTabCompleter(clearCmd);
 
+        ResetPowersCommand resetCmd = new ResetPowersCommand(this);
+        getCommand("resetpowers").setExecutor(resetCmd);
+        getCommand("resetpowers").setTabCompleter(resetCmd);
+
         WhoHasPowersCommand whoCmd = new WhoHasPowersCommand(this);
         getCommand("whohaspowers").setExecutor(whoCmd);
+
+        SetConfigCommand setConfigCmd = new SetConfigCommand(this);
+        getCommand("setconfig").setExecutor(setConfigCmd);
+        getCommand("setconfig").setTabCompleter(setConfigCmd);
+
+        RandomPowersCommand randomPowersCmd = new RandomPowersCommand(this);
+        getCommand("randompowers").setExecutor(randomPowersCmd);
+        getCommand("randompowers").setTabCompleter(randomPowersCmd);
 
         getServer().getScheduler().runTaskTimer(this, this::checkDeaths, 20L, 4L);
         getLogger().info("SoKrutoiPowersPlugin включён. Сил: " + powerManager.getAll().size());
@@ -66,13 +74,12 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
 
     public void scheduleDeath(UUID targetUUID, String playerName, UUID writerUUID) {
         if (pendingDeaths.containsKey(targetUUID)) return;
-        long delayMs = getConfig().getLong("death-delay-seconds", 40) * 1000L;
+        long delayMs = getConfig().getLong("death-delay-seconds", 40L) * 1000L;
         pendingDeaths.put(targetUUID, System.currentTimeMillis() + delayMs);
         writerMap.put(targetUUID, writerUUID);
         targetNames.put(targetUUID, playerName);
         savePendingDeaths();
-        getLogger().info("[DeathNote] Смерть запланирована: " + playerName
-                + " (" + (delayMs / 1000) + " сек)");
+        getLogger().info("[DeathNote] Смерть запланирована: " + playerName + " (" + (delayMs / 1000) + " сек)");
     }
 
     private void checkDeaths() {
@@ -87,13 +94,9 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
                 Player writer = Bukkit.getPlayer(writerUUID);
                 if (writer != null && writer.isOnline()) {
                     long remaining = deathTime - now;
-                    long sec = remaining > 0
-                            ? (long) Math.ceil(remaining / 1000.0)
-                            : 0;
+                    long sec = remaining > 0 ? (long) Math.ceil(remaining / 1000.0) : 0;
                     writer.sendActionBar(Component.text(
-                            "☠ " + name + " умрёт через " + sec + " сек...",
-                            NamedTextColor.RED
-                    ));
+                            "☠ " + name + " умрёт через " + sec + " сек...", NamedTextColor.RED));
                 }
             }
 
@@ -107,32 +110,22 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
                 }
             } else {
                 long remaining = deathTime - now;
-                long warnMs = getConfig().getLong("death-warn-seconds", 10) * 1000L;
-
+                long warnMs    = getConfig().getLong("death-warn-seconds", 10L) * 1000L;
                 if (remaining <= warnMs) {
                     Player target = Bukkit.getPlayer(targetUUID);
                     if (target != null && target.isOnline()) {
-
-                        // Слепота — один раз при входе в зону предупреждения
                         if (!deathWarned.contains(targetUUID)) {
                             deathWarned.add(targetUUID);
                             target.addPotionEffect(new PotionEffect(
-                                    PotionEffectType.BLINDNESS,
-                                    (int) (warnMs / 50),
-                                    0, false, false
-                            ));
+                                    PotionEffectType.BLINDNESS, (int) (warnMs), 0, false, false));
                         }
-
-                        // Сердцебиение с нарастающей частотой
-                        // progress 0.0 (далеко) → 1.0 (сейчас умрёт)
-                        float progress = 1.0f - (float) remaining / warnMs;
-                        // интервал: от 2000 мс до 400 мс
-                        long intervalMs = (long) (1000 - progress * 800); // 1000мс → 300мс
-                        long lastBeat = lastHeartbeat.getOrDefault(targetUUID, 0L);
+                        float progress   = 1.0f - (float) remaining / warnMs;
+                        long  intervalMs = (long) (1000 - progress * 800);
+                        long  lastBeat   = lastHeartbeat.getOrDefault(targetUUID, 0L);
                         if (now - lastBeat >= intervalMs) {
                             lastHeartbeat.put(targetUUID, now);
                             target.playSound(target.getLocation(),
-                                    Sound.ENTITY_WARDEN_HEARTBEAT, 1.0f, 1.0f);
+                                    Sound.ENTITY_WARDEN_HEARTBEAT, 1.0f + (progress*2), 1.0f);
                         }
                     }
                 }
@@ -159,9 +152,7 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
                 for (int i = 0; i <= 3; i++) {
                     Bukkit.getScheduler().runTaskLater(this, () ->
                             writer.sendActionBar(Component.text(
-                                    "✓ " + name + " мёртв", NamedTextColor.DARK_RED
-                            )), i * 20L
-                    );
+                                    "✓ " + name + " мёртв", NamedTextColor.DARK_RED)), i * 20L);
                 }
             }
         }

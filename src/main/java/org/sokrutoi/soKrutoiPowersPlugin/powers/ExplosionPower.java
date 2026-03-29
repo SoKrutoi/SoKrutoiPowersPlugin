@@ -6,35 +6,34 @@ import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.sokrutoi.soKrutoiPowersPlugin.SoKrutoiPowersPlugin;
 import org.sokrutoi.soKrutoiPowersPlugin.listeners.ExplosionListener;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 public class ExplosionPower extends SuperPower {
 
-    private final Set<UUID> players = new HashSet<>();
+    private final Set<UUID>         players       = new HashSet<>();
+    private final Map<UUID, Long>   chargingStart = new HashMap<>();
+    private final Map<UUID, Long>   cooldownEnd   = new HashMap<>();
 
-    /** UUID → System.currentTimeMillis() когда игрок начал зажимать Shift */
-    private final java.util.Map<UUID, Long> chargingStart = new java.util.HashMap<>();
-    /** UUID → System.currentTimeMillis() когда последний взрыв был */
-    private final java.util.Map<UUID, Long> cooldownEnd   = new java.util.HashMap<>();
+    // Resistance IV (amplifier=3) → 80% снижения урона.
+    // При мощности взрыва 4.5 урон в центре ~15-20 ед., с 80% снижением ≈ 3-4 ед.
+    // Игрок гарантированно переживает 1-2 своих взрыва.
+    private static final int RESISTANCE_AMPLIFIER = 3; // Resistance IV
 
     public ExplosionPower(SoKrutoiPowersPlugin plugin) {
         super(plugin);
         loadPlayers();
     }
 
-    @Override
-    public String getName() { return "Explosion"; }
+    @Override public String getName() { return "Explosion"; }
 
     @Override
     public String getDescription() {
-        long sec = ((SoKrutoiPowersPlugin) plugin).getConfig()
-                .getLong("explosion-charge-seconds", 5);
+        long sec = plugin.getConfig().getLong("explosion-charge-seconds", 5L);
         return "Взрыв — удерживай Shift " + sec + " сек. чтобы взорваться";
     }
 
@@ -44,30 +43,37 @@ public class ExplosionPower extends SuperPower {
                 .registerEvents(new ExplosionListener((SoKrutoiPowersPlugin) plugin, this), plugin);
     }
 
+    // --- Выдача ---
+
     @Override
     public void giveToPlayer(Player player) {
-        UUID uuid = player.getUniqueId();
-        if (players.contains(uuid)) {
-            player.sendMessage(Component.text(
-                    "У тебя уже есть сила Взрыва.", NamedTextColor.YELLOW));
+        if (!players.add(player.getUniqueId())) {
+            player.sendMessage(Component.text("У тебя уже есть сила Взрыва.", NamedTextColor.YELLOW));
             return;
         }
-        players.add(uuid);
         savePlayers();
-
-        long sec = ((SoKrutoiPowersPlugin) plugin).getConfig()
-                .getLong("explosion-charge-seconds", 5);
+        long sec = plugin.getConfig().getLong("explosion-charge-seconds", 5L);
         player.sendMessage(Component.text("Ты получил силу ", NamedTextColor.GRAY)
                 .append(Component.text("Взрыва", NamedTextColor.RED))
-                .append(Component.text(
-                        ". Удерживай Shift " + sec + " сек. чтобы взорваться.",
-                        NamedTextColor.GRAY)));
+                .append(Component.text(". Удерживай Shift " + sec + " сек. чтобы взорваться.", NamedTextColor.GRAY)));
     }
 
     @Override
-    public boolean hasPlayer(Player player) {
-        return players.contains(player.getUniqueId());
+    public boolean giveToOfflineUUID(UUID uuid) {
+        if (!players.add(uuid)) return false;
+        savePlayers();
+        return true;
     }
+
+    // --- Проверка ---
+
+    @Override
+    public boolean hasPlayer(Player player) { return players.contains(player.getUniqueId()); }
+
+    @Override
+    public Set<UUID> getAllPlayerUUIDs() { return Collections.unmodifiableSet(players); }
+
+    // --- Отзыв ---
 
     @Override
     public void revoke(Player player) {
@@ -76,148 +82,152 @@ public class ExplosionPower extends SuperPower {
         savePlayers();
         chargingStart.remove(uuid);
         cooldownEnd.remove(uuid);
-        player.sendMessage(Component.text(
-                "Твоя сила Взрыва была изъята.", NamedTextColor.DARK_RED));
+        removeResistance(player);
+        player.sendMessage(Component.text("Твоя сила Взрыва была изъята.", NamedTextColor.DARK_RED));
     }
 
-    public boolean hasPower(UUID uuid) {
-        return players.contains(uuid);
+    @Override
+    public void revokeOffline(UUID uuid) {
+        if (!players.remove(uuid)) return;
+        chargingStart.remove(uuid);
+        cooldownEnd.remove(uuid);
+        savePlayers();
     }
 
-    // --- Зарядка ---
+    // --- Сброс ---
 
-    /** Начать зарядку (Shift нажат) */
+    @Override
+    public void resetPlayer(Player player) {
+        UUID uuid = player.getUniqueId();
+        chargingStart.remove(uuid);
+        cooldownEnd.remove(uuid);
+        removeResistance(player);
+        player.sendActionBar(Component.text("◎ Кулдаун взрыва сброшен", NamedTextColor.GRAY));
+    }
+
+    // --- Логика зарядки ---
+
+    public boolean hasPower(UUID uuid) { return players.contains(uuid); }
+
     public void startCharge(Player player) {
         UUID uuid = player.getUniqueId();
         Long cdEnd = cooldownEnd.get(uuid);
         if (cdEnd != null && System.currentTimeMillis() < cdEnd) {
             long secLeft = (long) Math.ceil((cdEnd - System.currentTimeMillis()) / 1000.0);
-            player.sendActionBar(Component.text(
-                    "⏳ Кулдаун: " + secLeft + " сек.", NamedTextColor.GRAY));
+            player.sendActionBar(Component.text("⏳ Кулдаун: " + secLeft + " сек.", NamedTextColor.GRAY));
             return;
         }
         chargingStart.put(uuid, System.currentTimeMillis());
+
+        // Применяем Resistance IV на всё время зарядки + небольшой буфер (3 сек),
+        // чтобы защита действовала в момент самого взрыва.
+        long chargeSeconds = plugin.getConfig().getLong("explosion-charge-seconds", 5L);
+        int  durationTicks = (int) ((chargeSeconds + 3) * 20);
+        player.addPotionEffect(new PotionEffect(
+                PotionEffectType.RESISTANCE,
+                durationTicks,
+                RESISTANCE_AMPLIFIER,
+                false,   // ambient
+                false,   // particles
+                false    // icon — не показываем иконку эффекта
+        ));
     }
 
-    /** Отменить зарядку (Shift отпущен раньше времени) */
     public void cancelCharge(Player player) {
-        UUID uuid = player.getUniqueId();
-        if (chargingStart.remove(uuid) != null) {
-            player.sendActionBar(Component.text(
-                    "✗ Заряд сброшен", NamedTextColor.GRAY));
+        if (chargingStart.remove(player.getUniqueId()) != null) {
+            removeResistance(player);
+            player.sendActionBar(Component.text("✗ Заряд сброшен", NamedTextColor.GRAY));
         }
     }
 
-    /** Игрок удерживает Shift — вызывается каждый тик из таска в листенере */
     public void tickCharge(Player player) {
         UUID uuid = player.getUniqueId();
         Long start = chargingStart.get(uuid);
         if (start == null) return;
 
-        // Игрок умер — сбрасываем зарядку без взрыва
         if (!player.isOnline() || player.isDead()) {
             chargingStart.remove(uuid);
+            removeResistance(player);
             return;
         }
 
-        // Кулдаун ещё идёт — показываем таймер и не заряжаем
         Long cdEnd = cooldownEnd.get(uuid);
         if (cdEnd != null && System.currentTimeMillis() < cdEnd) {
             long secLeft = (long) Math.ceil((cdEnd - System.currentTimeMillis()) / 1000.0);
-            player.sendActionBar(Component.text(
-                    "⏳ Кулдаун: " + secLeft + " сек.", NamedTextColor.GRAY));
+            player.sendActionBar(Component.text("⏳ Кулдаун: " + secLeft + " сек.", NamedTextColor.GRAY));
             return;
         }
 
-        long chargeMs  = ((SoKrutoiPowersPlugin) plugin).getConfig()
-                .getLong("explosion-charge-seconds", 5) * 1000L;
+        long chargeMs  = plugin.getConfig().getLong("explosion-charge-seconds", 5L) * 1000L;
         long elapsed   = System.currentTimeMillis() - start;
         long remaining = chargeMs - elapsed;
 
         if (remaining <= 0) {
-            // Взрыв!
             chargingStart.remove(uuid);
             explode(player);
         } else {
-            // Показываем таймер с миллисекундами
-            double secLeft = remaining / 1000.0;
             player.sendActionBar(Component.text(
-                    String.format("🔥 Взрыв через %.1f сек...", secLeft),
+                    String.format("🔥 Взрыв через %.1f сек...", remaining / 1000.0),
                     NamedTextColor.RED));
         }
     }
 
-    public boolean isCharging(UUID uuid) {
-        return chargingStart.containsKey(uuid);
-    }
+    public boolean isCharging(UUID uuid) { return chargingStart.containsKey(uuid); }
 
     private void explode(Player player) {
-        SoKrutoiPowersPlugin main = (SoKrutoiPowersPlugin) plugin;
-        boolean breakBlocks = main.getConfig()
-                .getBoolean("explosion-break-blocks", false);
-        float power = (float) main.getConfig()
-                .getDouble("explosion-power", 6.0);
+        boolean breakBlocks = plugin.getConfig().getBoolean("explosion-break-blocks", false);
+        float   power       = (float) plugin.getConfig().getDouble("explosion-power", 6.0);
+        long    cdMs        = plugin.getConfig().getLong("explosion-cooldown-seconds", 60L) * 1000L;
 
-        long cooldownMs = main.getConfig().getLong("explosion-cooldown-seconds", 30) * 1000L;
-        cooldownEnd.put(player.getUniqueId(), System.currentTimeMillis() + cooldownMs);
-
+        cooldownEnd.put(player.getUniqueId(), System.currentTimeMillis() + cdMs);
         player.sendActionBar(Component.text("💥 ВЗРЫВ!", NamedTextColor.DARK_RED));
 
+        // Resistance уже на игроке от startCharge — она защитит его во время взрыва.
+        // После взрыва снимаем её, чтобы не давать постоянный баф.
         Location loc = player.getLocation();
+        player.getWorld().createExplosion(loc, power, false, breakBlocks);
 
-        // Визуальный эффект взрыва (звук + частицы) без урона от блоков
-        player.getWorld().createExplosion(
-                loc,
-                power,
-                false,       // поджигать ли
-                breakBlocks  // разрушать ли блоки
-        );
-
-        // Наносим урон и откидываем всех живых в радиусе вручную
         double radius    = power * 2.0;
-        double maxDamage = power * 4.0; // максимальный урон в центре
+        double maxDamage = power * 4.0;
 
         for (Entity entity : loc.getWorld().getNearbyEntities(loc, radius, radius, radius)) {
-            if (!(entity instanceof LivingEntity living)) continue;
-            if (entity.equals(player)) continue; // себя не бьём
-
+            if (!(entity instanceof LivingEntity living) || entity.equals(player)) continue;
             double dist = entity.getLocation().distance(loc);
             if (dist > radius) continue;
-
             double factor = 1.0 - (dist / radius);
-
-            // Урон убывает с расстоянием
-            double damage = maxDamage * factor;
-
-            // Сбрасываем неуязвимость от предыдущего удара чтобы урон прошёл
             living.setNoDamageTicks(0);
-            living.damage(damage, player);
+            living.damage(maxDamage * factor, player);
+            entity.setVelocity(entity.getLocation().toVector()
+                    .subtract(loc.toVector()).normalize()
+                    .multiply(factor * 2.5).setY(factor * 1.2));
+        }
 
-            // Отброс от центра взрыва
-            org.bukkit.util.Vector knockback = entity.getLocation()
-                    .toVector()
-                    .subtract(loc.toVector())
-                    .normalize()
-                    .multiply(factor * 2.5)
-                    .setY(factor * 1.2);
-            entity.setVelocity(knockback);
+        // Снимаем защитный эффект после взрыва — он своё дело сделал
+        removeResistance(player);
+    }
+
+    // --- Вспомогательный метод снятия Resistance ---
+
+    private void removeResistance(Player player) {
+        // Снимаем только если уровень совпадает с нашим — чтобы не трогать
+        // резистанс от зелий или других плагинов.
+        var current = player.getPotionEffect(PotionEffectType.RESISTANCE);
+        if (current != null && current.getAmplifier() == RESISTANCE_AMPLIFIER) {
+            player.removePotionEffect(PotionEffectType.RESISTANCE);
         }
     }
 
     // --- Персистентность ---
 
     private void loadPlayers() {
-        List<String> list = plugin.getConfig().getStringList("explosion-players");
-        for (String s : list) {
-            try { players.add(UUID.fromString(s)); }
-            catch (Exception ignored) {}
+        for (String s : plugin.getConfig().getStringList("explosion-players")) {
+            try { players.add(UUID.fromString(s)); } catch (Exception ignored) {}
         }
         plugin.getLogger().info("[Explosion] Загружено игроков: " + players.size());
     }
 
     public void savePlayers() {
-        plugin.getConfig().set("explosion-players",
-                players.stream().map(UUID::toString).toList());
+        plugin.getConfig().set("explosion-players", players.stream().map(UUID::toString).toList());
         plugin.saveConfig();
     }
 }

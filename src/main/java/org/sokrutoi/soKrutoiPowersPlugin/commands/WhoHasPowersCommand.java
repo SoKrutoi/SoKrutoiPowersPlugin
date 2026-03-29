@@ -25,72 +25,73 @@ public class WhoHasPowersCommand implements CommandExecutor {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command cmd,
                              @NotNull String label, @NotNull String[] args) {
 
-        Collection<? extends Player> online = Bukkit.getOnlinePlayers();
-
-        if (online.isEmpty()) {
-            sender.sendMessage(Component.text("Нет игроков в сети.", NamedTextColor.GRAY));
-            return true;
-        }
+        Set<UUID> onlineUUIDs = new HashSet<>();
+        for (Player p : Bukkit.getOnlinePlayers()) onlineUUIDs.add(p.getUniqueId());
 
         Collection<SuperPower> allPowers = plugin.getPowerManager().getAll();
 
-        // power → список игроков с этой силой
+        // power → список строк "имя (офлайн?)"
         Map<SuperPower, List<String>> powerToPlayers = new LinkedHashMap<>();
+        for (SuperPower power : allPowers) powerToPlayers.put(power, new ArrayList<>());
+
+        // UUID-based силы: берём всех из хранилища (онлайн + офлайн)
+        Set<UUID> anyPowerUUIDs = new HashSet<>();
         for (SuperPower power : allPowers) {
-            powerToPlayers.put(power, new ArrayList<>());
+            for (UUID uuid : power.getAllPlayerUUIDs()) {
+                anyPowerUUIDs.add(uuid);
+                String name   = nameOf(uuid);
+                String label2 = onlineUUIDs.contains(uuid) ? name : name + " §7(офлайн)";
+                powerToPlayers.get(power).add(label2);
+            }
         }
 
-        // игроки без единой суперсилы
-        List<String> noPower = new ArrayList<>();
-
-        for (Player player : online) {
-            boolean hasSome = false;
+        // Предметные силы (DeathNote): только онлайн-игроки, проверяем инвентарь
+        for (Player player : Bukkit.getOnlinePlayers()) {
             for (SuperPower power : allPowers) {
-                if (power.hasPlayer(player)) {
+                // Если сила не имеет UUID-хранилища (getAllPlayerUUIDs пустой) — проверяем hasPlayer
+                if (power.getAllPlayerUUIDs().isEmpty() && power.hasPlayer(player)) {
+                    anyPowerUUIDs.add(player.getUniqueId());
                     powerToPlayers.get(power).add(player.getName());
-                    hasSome = true;
                 }
             }
-            if (!hasSome) {
-                noPower.add(player.getName());
-            }
+        }
+
+        // Игроки без сил — только онлайн (офлайн без сил нам неинтересны)
+        List<String> noPower = new ArrayList<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (!anyPowerUUIDs.contains(p.getUniqueId())) noPower.add(p.getName());
         }
 
         // --- Вывод ---
-        sender.sendMessage(Component.text(
-                "═══════ Суперсилы ═══════", NamedTextColor.GOLD));
+        sender.sendMessage(Component.text("═══════ Суперсилы ═══════", NamedTextColor.GOLD));
 
         boolean anyFound = false;
         for (SuperPower power : allPowers) {
             List<String> players = powerToPlayers.get(power);
             if (players.isEmpty()) continue;
             anyFound = true;
-
-            sender.sendMessage(Component.text(
-                    "◆ " + power.getName() + ":", NamedTextColor.YELLOW));
-            for (String name : players) {
-                sender.sendMessage(Component.text(
-                        "  • " + name, NamedTextColor.WHITE));
-            }
+            sender.sendMessage(Component.text("◆ " + power.getName() + ":", NamedTextColor.YELLOW));
+            for (String name : players)
+                sender.sendMessage(Component.text("  • " + name, NamedTextColor.WHITE));
         }
 
-        if (!anyFound) {
-            sender.sendMessage(Component.text(
-                    "  (никто не имеет суперсил)", NamedTextColor.DARK_GRAY));
-        }
+        if (!anyFound)
+            sender.sendMessage(Component.text("  (никто не имеет суперсил)", NamedTextColor.DARK_GRAY));
 
         if (!noPower.isEmpty()) {
-            sender.sendMessage(Component.text(
-                    "◇ Нет сил:", NamedTextColor.GRAY));
-            for (String name : noPower) {
-                sender.sendMessage(Component.text(
-                        "  • " + name, NamedTextColor.DARK_GRAY));
-            }
+            sender.sendMessage(Component.text("◇ Нет сил (онлайн):", NamedTextColor.GRAY));
+            for (String name : noPower)
+                sender.sendMessage(Component.text("  • " + name, NamedTextColor.DARK_GRAY));
         }
 
-        sender.sendMessage(Component.text(
-                "═════════════════════════", NamedTextColor.GOLD));
-
+        sender.sendMessage(Component.text("═════════════════════════", NamedTextColor.GOLD));
         return true;
+    }
+
+    private String nameOf(UUID uuid) {
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null) return online.getName();
+        String name = Bukkit.getOfflinePlayer(uuid).getName();
+        return name != null ? name : uuid.toString().substring(0, 8) + "...";
     }
 }

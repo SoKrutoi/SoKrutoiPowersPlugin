@@ -11,12 +11,40 @@ death-warn-seconds: 10
 # ── Взрыв ──────────────────────────────
 # Сколько секунд нужно удерживать Shift для взрыва
 explosion-charge-seconds: 5
-
 # Мощность взрыва (ванильная шкала: крипер ~3, заряженный крипер ~6, TNT ~4)
-explosion-power: 6.0
-
+explosion-power: 4.5
 # Разрушать ли блоки при взрыве
-explosion-break-blocks: false
-
+explosion-break-blocks: true
 # Кулдаун между взрывами (в секундах)
-explosion-cooldown-seconds: 30
+explosion-cooldown-seconds: 60
+
+# ── Вор ────────────────────────────────
+# Кулдаун между кражами (в секундах). По умолчанию 6 минут = 360 сек.
+thief-cooldown-seconds: 360
+
+# ── Гигант ─────────────────────────────
+# Все числовые характеристики гиганта настраиваются здесь.
+# При рестарте/рекоде достаточно поменять значения и перезагрузить плагин.
+
+giant:
+  # ── Уровень 1: большой (Shift ×1) ──
+  level1:
+    scale: 2.5
+    hp-multiplier: 2.5
+    reach-add: 4.0
+    step-height-add: 1.0
+    speed-multiplier: 0.25
+    jump-strength-add: 0.2
+    knockback-resistance-add: 0.3
+    attack-knockback-add: 1.0
+
+  # ── Уровень 2: огромный (Shift ×2) ──
+  level2:
+    scale: 5.0
+    hp-multiplier: 5.0
+    reach-add: 9.0
+    step-height-add: 2.5
+    speed-multiplier: 0.6
+    jump-strength-add: 0.5
+    knockback-resistance-add: 0.7
+    attack-knockback-add: 2.5

@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -37,31 +38,50 @@ public class ClearPowersCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args[0].equals("**")) {
+            // Онлайн-игроки — полная очистка
             int count = 0;
             for (Player p : Bukkit.getOnlinePlayers()) {
-                if (clearPlayer(p)) count++;
+                if (clearOnline(p)) count++;
             }
+            // Офлайн-игроки — только UUID-хранилища
+            Set<UUID> clearedOffline = clearAllOffline();
             sender.sendMessage(Component.text(
-                    "Очищено суперсил у " + count + " игроков.", NamedTextColor.GREEN));
+                    "Очищено суперсил у " + count + " онлайн-игроков и " +
+                            clearedOffline.size() + " офлайн-игроков.", NamedTextColor.GREEN));
         } else {
-            Player target = Bukkit.getPlayerExact(args[0]);
-            if (target == null) {
+            Player online = Bukkit.getPlayerExact(args[0]);
+            if (online != null) {
+                clearOnline(online);
                 sender.sendMessage(Component.text(
-                        "Игрок «" + args[0] + "» не в сети.", NamedTextColor.RED));
-                return true;
+                        "Суперсилы у " + online.getName() + " очищены.", NamedTextColor.GREEN));
+            } else {
+                // Ищем офлайн-игрока
+                @SuppressWarnings("deprecation")
+                OfflinePlayer offline = Bukkit.getOfflinePlayer(args[0]);
+                if (!offline.hasPlayedBefore()) {
+                    sender.sendMessage(Component.text(
+                            "Игрок «" + args[0] + "» не найден.", NamedTextColor.RED));
+                    return true;
+                }
+                boolean cleared = clearOffline(offline.getUniqueId());
+                if (cleared) {
+                    sender.sendMessage(Component.text(
+                            "Суперсилы у " + args[0] + " (офлайн) очищены.", NamedTextColor.GREEN));
+                } else {
+                    sender.sendMessage(Component.text(
+                            "У " + args[0] + " нет суперсил.", NamedTextColor.GRAY));
+                }
             }
-            clearPlayer(target);
-            sender.sendMessage(Component.text(
-                    "Суперсилы у " + target.getName() + " очищены.", NamedTextColor.GREEN));
         }
         return true;
     }
 
-    private boolean clearPlayer(Player player) {
+    /** Полная очистка для онлайн-игрока (предметы + UUID + эффекты). */
+    private boolean clearOnline(Player player) {
         boolean cleared = false;
         UUID    uuid    = player.getUniqueId();
 
-        // 1. Предметные силы — изымаем тетради из инвентаря и эндер-сундука
+        // Тетради из инвентаря и эндер-сундука
         for (int i = 0; i < player.getInventory().getSize(); i++) {
             if (isDeathNote(player.getInventory().getItem(i))) {
                 player.getInventory().setItem(i, null);
@@ -75,7 +95,7 @@ public class ClearPowersCommand implements CommandExecutor, TabCompleter {
             }
         }
 
-        // 2. Отменить все запланированные смерти этим игроком
+        // Запланированные смерти этим игроком
         List<UUID> toCancel = plugin.getWriterMap().entrySet().stream()
                 .filter(e -> e.getValue().equals(uuid))
                 .map(Map.Entry::getKey)
@@ -87,7 +107,7 @@ public class ClearPowersCommand implements CommandExecutor, TabCompleter {
             cleared = true;
         }
 
-        // 3. UUID-based силы — вызываем revoke() у каждой
+        // UUID-based силы
         for (SuperPower power : plugin.getPowerManager().getAll()) {
             if (power.hasPlayer(player)) {
                 power.revoke(player);
@@ -95,9 +115,50 @@ public class ClearPowersCommand implements CommandExecutor, TabCompleter {
             }
         }
 
-        if (cleared) {
-            player.sendMessage(Component.text(
-                    "Твои суперсилы были изъяты.", NamedTextColor.DARK_RED));
+        if (cleared)
+            player.sendMessage(Component.text("Твои суперсилы были изъяты.", NamedTextColor.DARK_RED));
+        return cleared;
+    }
+
+    /** Очистка только UUID-хранилищ для офлайн-игрока. */
+    private boolean clearOffline(UUID uuid) {
+        boolean cleared = false;
+
+        // Запланированные смерти написанные этим игроком
+        List<UUID> toCancel = plugin.getWriterMap().entrySet().stream()
+                .filter(e -> e.getValue().equals(uuid))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        for (UUID targetUUID : toCancel) {
+            plugin.getPendingDeaths().remove(targetUUID);
+            plugin.getWriterMap().remove(targetUUID);
+            plugin.getTargetNames().remove(targetUUID);
+            cleared = true;
+        }
+
+        // UUID-based силы
+        for (SuperPower power : plugin.getPowerManager().getAll()) {
+            if (power.getAllPlayerUUIDs().contains(uuid)) {
+                power.revokeOffline(uuid);
+                cleared = true;
+            }
+        }
+        return cleared;
+    }
+
+    /** Очищает всех офлайн-игроков из всех UUID-хранилищ. Возвращает затронутые UUID. */
+    private Set<UUID> clearAllOffline() {
+        Set<UUID> onlineUUIDs = new HashSet<>();
+        for (Player p : Bukkit.getOnlinePlayers()) onlineUUIDs.add(p.getUniqueId());
+
+        Set<UUID> cleared = new HashSet<>();
+        for (SuperPower power : plugin.getPowerManager().getAll()) {
+            for (UUID uuid : new HashSet<>(power.getAllPlayerUUIDs())) {
+                if (!onlineUUIDs.contains(uuid)) {
+                    power.revokeOffline(uuid);
+                    cleared.add(uuid);
+                }
+            }
         }
         return cleared;
     }
