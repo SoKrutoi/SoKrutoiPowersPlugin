@@ -40,6 +40,7 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
         powerManager.register(new ExplosionPower(this));
         powerManager.register(new ThiefPower(this));
         powerManager.register(new ZaWarudoPower(this));
+        powerManager.register(new FlashPower(this));   // ← новая сила
 
         GivePowerCommand givePowerCmd = new GivePowerCommand(this);
         getCommand("givepower").setExecutor(givePowerCmd);

@@ -85,6 +85,22 @@ public class ZaWarudoPower extends SuperPower {
         return false;
     }
 
+    /** Возвращает true если стойка является фантомом активатора в активной зоне. */
+    public boolean isDummyStand(ArmorStand stand) {
+        for (FreezeZone zone : activeFreezes.values()) {
+            if (stand.equals(zone.dummyStand)) return true;
+        }
+        return false;
+    }
+
+    /** Возвращает true если переданный UUID — это фейковая стойка одной из активных зон. */
+    public boolean isDummyStand(UUID entityUUID) {
+        for (FreezeZone zone : activeFreezes.values()) {
+            if (zone.dummyStand != null && zone.dummyStand.getUniqueId().equals(entityUUID)) return true;
+        }
+        return false;
+    }
+
     // ── Отзыв ─────────────────────────────────────────────────────────────
 
     @Override
@@ -167,22 +183,28 @@ public class ZaWarudoPower extends SuperPower {
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getUniqueId().equals(uuid)) continue;
                 if (immune.contains(p.getUniqueId())) continue;
-                freezeEntity(p, zone);
+                freezePlayer(p, zone);
             }
             for (Entity entity : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
                 if (entity instanceof Player) continue;
                 UUID eid = entity.getUniqueId();
                 if (eid.equals(uuid)) continue;
+                if (zone.dummyStand != null && zone.dummyStand.getUniqueId().equals(eid)) continue;
                 if (entity.getLocation().distanceSquared(center) > radius * radius) continue;
-                freezeEntity(entity, zone);
+                freezeNonPlayer(entity, zone);
             }
         } else {
             for (Entity entity : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
                 UUID eid = entity.getUniqueId();
                 if (eid.equals(uuid))     continue;
-                if (immune.contains(eid)) continue;
+                if (zone.dummyStand != null && zone.dummyStand.getUniqueId().equals(eid)) continue;
                 if (entity.getLocation().distanceSquared(center) > radius * radius) continue;
-                freezeEntity(entity, zone);
+                if (entity instanceof Player p) {
+                    if (immune.contains(eid)) continue;
+                    freezePlayer(p, zone);
+                } else {
+                    freezeNonPlayer(entity, zone);
+                }
             }
         }
 
@@ -208,14 +230,7 @@ public class ZaWarudoPower extends SuperPower {
                 ? player.customName()
                 : Component.text(player.getName()));
         stand.setCustomNameVisible(false);
-        // Копируем броню
-        stand.getEquipment().setHelmet(player.getInventory().getHelmet());
-        stand.getEquipment().setChestplate(player.getInventory().getChestplate());
-        stand.getEquipment().setLeggings(player.getInventory().getLeggings());
-        stand.getEquipment().setBoots(player.getInventory().getBoots());
-        // Копируем предметы в руках
-        stand.getEquipment().setItemInMainHand(player.getInventory().getItemInMainHand());
-        stand.getEquipment().setItemInOffHand(player.getInventory().getItemInOffHand());
+        // Стойка намеренно пустая — предметы не копируем, чтобы не дублировать экипировку игрока
         // Ориентация как у игрока
         stand.setRotation(standLoc.getYaw(), 0);
         zone.dummyStand = stand;
@@ -259,7 +274,20 @@ public class ZaWarudoPower extends SuperPower {
                     if (!nearby.getWorld().equals(center.getWorld())) continue;
                     if (nearby.getLocation().distanceSquared(center) > radius * radius) continue;
                 }
-                freezeEntity(nearby, zone);
+                freezePlayer(nearby, zone);
+            }
+
+            // ── ИСПРАВЛЕНИЕ: подхватываем новые не-игровые сущности ────────
+            // Стрелы, падающие блоки, мобы, предметы — всё что появилось в зоне
+            // после активации (включая выстрелы самого активатора)
+            for (Entity entity : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
+                if (entity instanceof Player) continue;
+                UUID eid = entity.getUniqueId();
+                if (eid.equals(uuid))                       continue; // на всякий случай
+                if (zone.frozenEntities.containsKey(eid))   continue; // уже заморожена
+                if (isDummyStand(eid))                      continue; // стойка-фантом
+                if (entity.getLocation().distanceSquared(center) > radius * radius) continue;
+                freezeNonPlayer(entity, zone);
             }
 
             // ── Полная заморозка: телепортируем игроков на место ───────────
@@ -279,8 +307,9 @@ public class ZaWarudoPower extends SuperPower {
                 p.sendActionBar(Component.text("⏸ Время остановлено...", NamedTextColor.DARK_PURPLE));
             }
 
-            // ── Обнуляем скорость у не-игровых сущностей ──────────────────
-            for (UUID eid : zone.frozenEntities) {
+            // ── Обнуляем скорость у не-игровых сущностей каждый тик ────────
+            // (движок может применять гравитацию и другие силы между тиками)
+            for (UUID eid : zone.frozenEntities.keySet()) {
                 Entity e = Bukkit.getEntity(eid);
                 if (e != null && !e.isDead()) {
                     e.setVelocity(new Vector(0, 0, 0));
@@ -306,24 +335,34 @@ public class ZaWarudoPower extends SuperPower {
         zone.tickTaskId = taskRef[0].getTaskId();
     }
 
-    // ── Заморозка одной сущности ───────────────────────────────────────────
+    // ── Заморозка игрока ───────────────────────────────────────────────────
 
-    private void freezeEntity(Entity entity, FreezeZone zone) {
-        if (entity instanceof Player target) {
-            UUID pid = target.getUniqueId();
-            zone.frozenPlayers.put(pid, target.getLocation().clone());
-            target.playSound(target.getLocation(), Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.8f, 0.7f);
+    private void freezePlayer(Player target, FreezeZone zone) {
+        UUID pid = target.getUniqueId();
+        zone.frozenPlayers.put(pid, target.getLocation().clone());
+        target.playSound(target.getLocation(), Sound.ENTITY_ELDER_GUARDIAN_CURSE, 0.8f, 0.7f);
+    }
 
-        } else if (entity instanceof Mob mob) {
-            zone.frozenEntities.add(entity.getUniqueId());
+    // ── Заморозка не-игровой сущности с сохранением скорости ──────────────
+
+    /**
+     * Сохраняет текущий вектор скорости сущности в зоне, затем обнуляет его
+     * и отключает гравитацию/ИИ. При разморозке вектор будет восстановлен,
+     * так что стрела полетит туда же, куда летела, моб продолжит двигаться,
+     * а падающий блок возобновит падение.
+     */
+    private void freezeNonPlayer(Entity entity, FreezeZone zone) {
+        UUID eid = entity.getUniqueId();
+
+        // Сохраняем скорость ДО обнуления — это ключевое исправление
+        Vector savedVelocity = entity.getVelocity().clone();
+        zone.frozenEntities.put(eid, savedVelocity);
+
+        entity.setGravity(false);
+        entity.setVelocity(new Vector(0, 0, 0));
+
+        if (entity instanceof Mob mob) {
             mob.setAI(false);
-            mob.setGravity(false);
-            mob.setVelocity(new Vector(0, 0, 0));
-
-        } else {
-            zone.frozenEntities.add(entity.getUniqueId());
-            entity.setGravity(false);
-            entity.setVelocity(new Vector(0, 0, 0));
         }
     }
 
@@ -393,12 +432,20 @@ public class ZaWarudoPower extends SuperPower {
         zone.center.getWorld().playSound(zone.center, Sound.BLOCK_BEACON_DEACTIVATE, soundVolume, 0.5f);
         zone.center.getWorld().playSound(zone.center, Sound.ENTITY_WARDEN_SONIC_BOOM, soundVolume * 0.4f, 1.5f);
 
-        // Размораживаем сущности
-        for (UUID eid : zone.frozenEntities) {
-            Entity e = Bukkit.getEntity(eid);
+        // ── ИСПРАВЛЕНИЕ: размораживаем сущности с восстановлением скорости ─
+        for (Map.Entry<UUID, Vector> entry : zone.frozenEntities.entrySet()) {
+            Entity e = Bukkit.getEntity(entry.getKey());
             if (e == null || e.isDead()) continue;
+
             e.setGravity(true);
             if (e instanceof Mob mob) mob.setAI(true);
+
+            // Восстанавливаем сохранённый вектор скорости — стрела полетит дальше,
+            // падающий блок продолжит падать, моб возобновит движение
+            Vector savedVelocity = entry.getValue();
+            if (savedVelocity != null) {
+                e.setVelocity(savedVelocity);
+            }
         }
 
         // Размораживаем игроков: снимаем эффекты, без title
@@ -455,7 +502,14 @@ public class ZaWarudoPower extends SuperPower {
         final double   radius;
         final boolean  wholeServer;
         final Map<UUID, Location> frozenPlayers  = new HashMap<>();
-        final Set<UUID>           frozenEntities = new HashSet<>();
+
+        /**
+         * Ключ — UUID сущности, значение — её скорость на момент заморозки.
+         * Map вместо Set позволяет хранить сохранённые векторы прямо здесь,
+         * без отдельной коллекции.
+         */
+        final Map<UUID, Vector> frozenEntities = new HashMap<>();
+
         int        tickTaskId   = -1;
         int        particleTick = 0;
         // Стойка для брони — фантом активатора на время заморозки

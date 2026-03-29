@@ -53,7 +53,12 @@ public class SetConfigCommand implements CommandExecutor, TabCompleter {
             "zawarudo.duration-seconds",
             "zawarudo.cooldown-seconds",
             "zawarudo.double-shift-window-ms",
-            "zawarudo.freeze-whole-server"
+            // Флеш
+            "flash.speed-level",
+            "flash.dash-velocity",
+            "flash.dash-cooldown-seconds",
+            "flash.step-height-bonus",
+            "flash.hunger-interval-ticks"
     );
 
     public SetConfigCommand(SoKrutoiPowersPlugin plugin) {

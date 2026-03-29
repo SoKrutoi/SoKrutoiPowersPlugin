@@ -52,6 +52,14 @@ shrink:
 zawarudo:
   radius: 25.0                  # радиус заморозки (блоки)
   duration-seconds: 9           # время остановки (секунды)
-  cooldown-seconds: 300         # кулдаун (5 минут = 300 сек.)
+  cooldown-seconds: 250         # кулдаун (5 минут = 300 сек.)
   double-shift-window-ms: 400   # окно двойного шифта (мс)
   freeze-whole-server: false    # true — заморозить весь сервер, false — только в радиусе
+
+# ── Флеш ───────────────────────────────
+flash:
+  speed-level: 5                # уровень Speed (1–255; стандартный максимум — 5)
+  dash-velocity: 1.8            # сила рывка (множитель вектора взгляда)
+  dash-cooldown-seconds: 1      # кулдаун рывка (секунды) — раньше было 3
+  step-height-bonus: 1.5        # на сколько блоков выше шагает игрок в режиме флеша
+  hunger-interval-ticks: 300    # тики между потерей 1 ед. голода (300 = 15 сек.)
