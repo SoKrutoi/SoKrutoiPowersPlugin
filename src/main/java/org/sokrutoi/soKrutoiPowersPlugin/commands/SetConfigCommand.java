@@ -9,22 +9,24 @@ import org.bukkit.command.TabCompleter;
 import org.jetbrains.annotations.NotNull;
 import org.sokrutoi.soKrutoiPowersPlugin.SoKrutoiPowersPlugin;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class SetConfigCommand implements CommandExecutor, TabCompleter {
 
     private final SoKrutoiPowersPlugin plugin;
 
-    // Полный список редактируемых ключей конфига
     private static final List<String> KEYS = List.of(
+            // Тетрадь смерти
             "death-delay-seconds",
             "death-warn-seconds",
+            // Взрыв
             "explosion-charge-seconds",
             "explosion-power",
             "explosion-break-blocks",
             "explosion-cooldown-seconds",
+            // Вор
             "thief-cooldown-seconds",
+            // Гигант
             "giant.level1.scale",
             "giant.level1.hp-multiplier",
             "giant.level1.reach-add",
@@ -40,7 +42,18 @@ public class SetConfigCommand implements CommandExecutor, TabCompleter {
             "giant.level2.speed-multiplier",
             "giant.level2.jump-strength-add",
             "giant.level2.knockback-resistance-add",
-            "giant.level2.attack-knockback-add"
+            "giant.level2.attack-knockback-add",
+            // Уменьшение
+            "shrink.level1.scale",
+            "shrink.level1.hp-multiplier",
+            "shrink.level2.scale",
+            "shrink.level2.hp-multiplier",
+            // За Варудо
+            "zawarudo.radius",
+            "zawarudo.duration-seconds",
+            "zawarudo.cooldown-seconds",
+            "zawarudo.double-shift-window-ms",
+            "zawarudo.freeze-whole-server"
     );
 
     public SetConfigCommand(SoKrutoiPowersPlugin plugin) {
@@ -59,8 +72,8 @@ public class SetConfigCommand implements CommandExecutor, TabCompleter {
                     Component.text("  • ", NamedTextColor.DARK_GRAY)
                             .append(Component.text(k, NamedTextColor.YELLOW))
                             .append(Component.text(" = ", NamedTextColor.DARK_GRAY))
-                            .append(Component.text(String.valueOf(plugin.getConfig().get(k)),
-                                    NamedTextColor.WHITE))));
+                            .append(Component.text(
+                                    String.valueOf(plugin.getConfig().get(k)), NamedTextColor.WHITE))));
             return true;
         }
 
@@ -73,7 +86,6 @@ public class SetConfigCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Определяем тип по текущему значению в конфиге
         Object current = plugin.getConfig().get(key);
         if (current == null) {
             sender.sendMessage(Component.text(
@@ -83,15 +95,11 @@ public class SetConfigCommand implements CommandExecutor, TabCompleter {
 
         try {
             if (current instanceof Boolean) {
-                boolean val = Boolean.parseBoolean(valueStr);
-                plugin.getConfig().set(key, val);
+                plugin.getConfig().set(key, Boolean.parseBoolean(valueStr));
             } else if (current instanceof Double) {
-                double val = Double.parseDouble(valueStr);
-                plugin.getConfig().set(key, val);
+                plugin.getConfig().set(key, Double.parseDouble(valueStr));
             } else if (current instanceof Number) {
-                // Integer или Long — сохраняем как long
-                long val = Long.parseLong(valueStr);
-                plugin.getConfig().set(key, val);
+                plugin.getConfig().set(key, Long.parseLong(valueStr));
             } else {
                 plugin.getConfig().set(key, valueStr);
             }
@@ -122,7 +130,6 @@ public class SetConfigCommand implements CommandExecutor, TabCompleter {
                     .toList();
         }
         if (args.length == 2) {
-            // Подсказываем текущее значение
             Object val = plugin.getConfig().get(args[0]);
             if (val instanceof Boolean) return List.of("true", "false");
             if (val != null) return List.of(val.toString());

@@ -43,11 +43,8 @@ public class DeathNotePower extends SuperPower {
         plugin.getServer().getPluginManager().registerEvents(new DeathNoteJoinListener(main), plugin);
     }
 
-    // Предметная сила — офлайн-выдача невозможна
     @Override public boolean giveToOfflineUUID(UUID uuid) { return false; }
-
-    // Предметная сила — UUID всех владельцев неизвестен без сканирования инвентарей
-    @Override public Set<UUID> getAllPlayerUUIDs() { return Set.of(); }
+    @Override public Set<UUID> getAllPlayerUUIDs()         { return Set.of(); }
 
     @Override
     public boolean hasPlayer(Player player) {
@@ -59,6 +56,8 @@ public class DeathNotePower extends SuperPower {
         return Arrays.stream(inventory.getContents()).anyMatch(this::isDeathNote);
     }
 
+    // ── Выдача ─────────────────────────────────────────────────────────────
+
     @Override
     public void giveToPlayer(Player player) {
         ItemStack book     = createDeathNote();
@@ -68,12 +67,33 @@ public class DeathNotePower extends SuperPower {
                 (Math.random() - 0.5) * 0.05, -0.2, (Math.random() - 0.5) * 0.05));
         item.setPickupDelay(10);
 
-        // Сообщение выводится в чат ВСЕМ игрокам на сервере
-        Bukkit.broadcast(
-                Component.text("С неба упала ", NamedTextColor.GRAY)
-                        .append(Component.text("Тетрадь Смерти", NamedTextColor.GRAY))
-                        .append(Component.text("... ", NamedTextColor.GRAY)));
+        // Серый широковещательный текст, без ника получателя и без черепа
+        Bukkit.broadcast(Component.text("С неба упала Тетрадь Смерти...", NamedTextColor.GRAY));
     }
+
+    // ── Отзыв — удаляем тетрадь из инвентаря (для /clearpowers и /randompowers) ──
+
+    @Override
+    public void revoke(Player player) {
+        boolean removed = false;
+        for (int i = 0; i < player.getInventory().getSize(); i++) {
+            if (isDeathNote(player.getInventory().getItem(i))) {
+                player.getInventory().setItem(i, null);
+                removed = true;
+            }
+        }
+        for (int i = 0; i < player.getEnderChest().getSize(); i++) {
+            if (isDeathNote(player.getEnderChest().getItem(i))) {
+                player.getEnderChest().setItem(i, null);
+                removed = true;
+            }
+        }
+        if (removed) {
+            player.sendMessage(Component.text("Твоя Тетрадь Смерти была изъята.", NamedTextColor.DARK_RED));
+        }
+    }
+
+    // ── Создание предмета ─────────────────────────────────────────────────
 
     public ItemStack createDeathNote() {
         SoKrutoiPowersPlugin main  = (SoKrutoiPowersPlugin) plugin;

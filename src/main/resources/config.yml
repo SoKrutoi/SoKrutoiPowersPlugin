@@ -9,25 +9,16 @@ death-delay-seconds: 40
 death-warn-seconds: 10
 
 # ── Взрыв ──────────────────────────────
-# Сколько секунд нужно удерживать Shift для взрыва
 explosion-charge-seconds: 5
-# Мощность взрыва (ванильная шкала: крипер ~3, заряженный крипер ~6, TNT ~4)
 explosion-power: 4.5
-# Разрушать ли блоки при взрыве
 explosion-break-blocks: true
-# Кулдаун между взрывами (в секундах)
 explosion-cooldown-seconds: 60
 
 # ── Вор ────────────────────────────────
-# Кулдаун между кражами (в секундах). По умолчанию 6 минут = 360 сек.
-thief-cooldown-seconds: 360
+thief-cooldown-seconds: 120
 
 # ── Гигант ─────────────────────────────
-# Все числовые характеристики гиганта настраиваются здесь.
-# При рестарте/рекоде достаточно поменять значения и перезагрузить плагин.
-
 giant:
-  # ── Уровень 1: большой (Shift ×1) ──
   level1:
     scale: 2.5
     hp-multiplier: 2.5
@@ -37,8 +28,6 @@ giant:
     jump-strength-add: 0.2
     knockback-resistance-add: 0.3
     attack-knockback-add: 1.0
-
-  # ── Уровень 2: огромный (Shift ×2) ──
   level2:
     scale: 5.0
     hp-multiplier: 5.0
@@ -48,3 +37,21 @@ giant:
     jump-strength-add: 0.5
     knockback-resistance-add: 0.7
     attack-knockback-add: 2.5
+
+# ── Уменьшение ─────────────────────────
+# Меняются только размер и HP. Скорость, прыжок, дальность — остаются прежними.
+shrink:
+  level1:
+    scale: 0.5          # половина обычного роста
+    hp-multiplier: 0.5  # половина обычных HP
+  level2:
+    scale: 0.1          # почти пиксель (~2 пикселя в высоту — минимум движка)
+    hp-multiplier: 0.25 # четверть обычных HP
+
+# ── За Варудо ──────────────────────────
+zawarudo:
+  radius: 25.0                  # радиус заморозки (блоки)
+  duration-seconds: 9           # время остановки (секунды)
+  cooldown-seconds: 300         # кулдаун (5 минут = 300 сек.)
+  double-shift-window-ms: 400   # окно двойного шифта (мс)
+  freeze-whole-server: false    # true — заморозить весь сервер, false — только в радиусе

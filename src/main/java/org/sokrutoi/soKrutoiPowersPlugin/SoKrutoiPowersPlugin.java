@@ -36,8 +36,10 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
         powerManager.register(new DeathNotePower(this));
         powerManager.register(new InvisibilityPower(this));
         powerManager.register(new GiantPower(this));
+        powerManager.register(new ShrinkPower(this));
         powerManager.register(new ExplosionPower(this));
         powerManager.register(new ThiefPower(this));
+        powerManager.register(new ZaWarudoPower(this));
 
         GivePowerCommand givePowerCmd = new GivePowerCommand(this);
         getCommand("givepower").setExecutor(givePowerCmd);
@@ -125,7 +127,7 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
                         if (now - lastBeat >= intervalMs) {
                             lastHeartbeat.put(targetUUID, now);
                             target.playSound(target.getLocation(),
-                                    Sound.ENTITY_WARDEN_HEARTBEAT, 1.0f + (progress*2), 1.0f);
+                                    Sound.ENTITY_WARDEN_HEARTBEAT, 1.0f + (progress * 2), 1.0f);
                         }
                     }
                 }
