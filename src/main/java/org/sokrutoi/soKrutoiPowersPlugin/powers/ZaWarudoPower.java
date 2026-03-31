@@ -8,6 +8,7 @@ import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.entity.*;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -178,25 +179,31 @@ public class ZaWarudoPower extends SuperPower {
         activeFreezes.put(uuid, zone);
 
         Set<UUID> immune = getAllPlayerUUIDs();
-        // Начальная заморозка — фильтруем по сфере (getNearbyEntities возвращает куб)
+
+        // ── Начальная заморозка ────────────────────────────────────────────
         if (wholeServer) {
+            // Игроки — ВСЕ на сервере, без ограничения по миру/радиусу
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getUniqueId().equals(uuid)) continue;
                 if (immune.contains(p.getUniqueId())) continue;
                 freezePlayer(p, zone);
             }
-            for (Entity entity : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
-                if (entity instanceof Player) continue;
-                UUID eid = entity.getUniqueId();
-                if (eid.equals(uuid)) continue;
-                if (zone.dummyStand != null && zone.dummyStand.getUniqueId().equals(eid)) continue;
-                if (entity.getLocation().distanceSquared(center) > radius * radius) continue;
-                freezeNonPlayer(entity, zone);
+            // Сущности — во ВСЕХ мирах, без ограничения по радиусу
+            // (дамми-стойка ещё не создана, проверяем null-safe)
+            for (World w : Bukkit.getWorlds()) {
+                for (Entity entity : w.getEntities()) {
+                    if (entity instanceof Player) continue;
+                    UUID eid = entity.getUniqueId();
+                    if (eid.equals(uuid)) continue;
+                    if (zone.dummyStand != null && zone.dummyStand.getUniqueId().equals(eid)) continue;
+                    freezeNonPlayer(entity, zone);
+                }
             }
         } else {
+            // Режим радиуса — сущности в сфере вокруг активатора
             for (Entity entity : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
                 UUID eid = entity.getUniqueId();
-                if (eid.equals(uuid))     continue;
+                if (eid.equals(uuid)) continue;
                 if (zone.dummyStand != null && zone.dummyStand.getUniqueId().equals(eid)) continue;
                 if (entity.getLocation().distanceSquared(center) > radius * radius) continue;
                 if (entity instanceof Player p) {
@@ -208,9 +215,18 @@ public class ZaWarudoPower extends SuperPower {
             }
         }
 
-        // Звуки активации — радиус слышимости ограничен через volume
-        center.getWorld().playSound(center, Sound.BLOCK_BEACON_ACTIVATE,      soundVolume, 0.3f);
-        center.getWorld().playSound(center, Sound.ENTITY_ELDER_GUARDIAN_CURSE, soundVolume, 0.5f);
+        // ── Звуки активации ───────────────────────────────────────────────
+        // В режиме всего сервера — играем звук напрямую каждому игроку,
+        // т.к. world.playSound() ограничен дистанцией и не достигнет всех.
+        if (wholeServer) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                p.playSound(p.getLocation(), Sound.BLOCK_BEACON_ACTIVATE,       1.0f, 0.3f);
+                p.playSound(p.getLocation(), Sound.ENTITY_ELDER_GUARDIAN_CURSE, 1.0f, 0.5f);
+            }
+        } else {
+            center.getWorld().playSound(center, Sound.BLOCK_BEACON_ACTIVATE,       soundVolume, 0.3f);
+            center.getWorld().playSound(center, Sound.ENTITY_ELDER_GUARDIAN_CURSE, soundVolume, 0.5f);
+        }
 
         // ── Невидимость активатора на всё время заморозки ─────────────────
         int durTicks = (int) (durMs / 50);
@@ -234,6 +250,13 @@ public class ZaWarudoPower extends SuperPower {
         // Ориентация как у игрока
         stand.setRotation(standLoc.getYaw(), 0);
         zone.dummyStand = stand;
+
+        // В режиме wholeServer дамми-стойка только что создана — замораживаем её
+        // (она появилась уже после основного цикла выше)
+        if (wholeServer) {
+            // Стойка не должна быть заморожена — она фантом активатора, стоит на месте
+            // и уже без гравитации. Ничего не делаем.
+        }
 
         // Титл только для активатора
         player.showTitle(Title.title(
@@ -260,7 +283,7 @@ public class ZaWarudoPower extends SuperPower {
                 return;
             }
 
-            // ── Подхватываем новых игроков, вошедших в зону ────────────────
+            // ── Подхватываем новых игроков, вошедших в зону / подключившихся ──
             Iterable<? extends Player> candidates = zone.wholeServer
                     ? Bukkit.getOnlinePlayers()
                     : center.getWorld().getPlayers();
@@ -277,17 +300,30 @@ public class ZaWarudoPower extends SuperPower {
                 freezePlayer(nearby, zone);
             }
 
-            // ── ИСПРАВЛЕНИЕ: подхватываем новые не-игровые сущности ────────
-            // Стрелы, падающие блоки, мобы, предметы — всё что появилось в зоне
-            // после активации (включая выстрелы самого активатора)
-            for (Entity entity : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
-                if (entity instanceof Player) continue;
-                UUID eid = entity.getUniqueId();
-                if (eid.equals(uuid))                       continue; // на всякий случай
-                if (zone.frozenEntities.containsKey(eid))   continue; // уже заморожена
-                if (isDummyStand(eid))                      continue; // стойка-фантом
-                if (entity.getLocation().distanceSquared(center) > radius * radius) continue;
-                freezeNonPlayer(entity, zone);
+            // ── Подхватываем новые не-игровые сущности ────────────────────
+            if (zone.wholeServer) {
+                // Все миры, без ограничения по радиусу
+                for (World w : Bukkit.getWorlds()) {
+                    for (Entity entity : w.getEntities()) {
+                        if (entity instanceof Player) continue;
+                        UUID eid = entity.getUniqueId();
+                        if (eid.equals(uuid))                     continue;
+                        if (zone.frozenEntities.containsKey(eid)) continue;
+                        if (isDummyStand(eid))                    continue;
+                        freezeNonPlayer(entity, zone);
+                    }
+                }
+            } else {
+                // Радиус-режим: только сущности в сфере
+                for (Entity entity : center.getWorld().getNearbyEntities(center, radius, radius, radius)) {
+                    if (entity instanceof Player) continue;
+                    UUID eid = entity.getUniqueId();
+                    if (eid.equals(uuid))                     continue;
+                    if (zone.frozenEntities.containsKey(eid)) continue;
+                    if (isDummyStand(eid))                    continue;
+                    if (entity.getLocation().distanceSquared(center) > radius * radius) continue;
+                    freezeNonPlayer(entity, zone);
+                }
             }
 
             // ── Полная заморозка: телепортируем игроков на место ───────────
@@ -316,8 +352,13 @@ public class ZaWarudoPower extends SuperPower {
                 }
             }
 
-            // ── Частицы в зоне остановки времени ──────────────────────────
-            spawnParticles(center, radius, zone);
+            // ── Частицы — только в режиме радиуса ─────────────────────────
+            // В режиме wholeServer сфера не нужна — нет видимой "границы зоны".
+            if (!zone.wholeServer) {
+                spawnParticles(center, radius, zone); // particleTick++ внутри
+            } else {
+                zone.particleTick++; // всё равно считаем для звука часов
+            }
 
             // ── Таймер в action bar для активатора ────────────────────────
             Player activator = Bukkit.getPlayer(uuid);
@@ -427,10 +468,18 @@ public class ZaWarudoPower extends SuperPower {
             plugin.getServer().getScheduler().cancelTask(zone.tickTaskId);
         }
 
-        // Звук конца — ограниченный радиус через volume (те же radius+20 блоков)
-        float soundVolume = (float) ((zone.radius + 20.0) / 16.0);
-        zone.center.getWorld().playSound(zone.center, Sound.BLOCK_BEACON_DEACTIVATE, soundVolume, 0.5f);
-        zone.center.getWorld().playSound(zone.center, Sound.ENTITY_WARDEN_SONIC_BOOM, soundVolume * 0.4f, 1.5f);
+        // ── Звук конца ────────────────────────────────────────────────────
+        // В режиме wholeServer — рассылаем напрямую каждому игроку.
+        if (zone.wholeServer) {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                p.playSound(p.getLocation(), Sound.BLOCK_BEACON_DEACTIVATE, 1.0f, 0.5f);
+                p.playSound(p.getLocation(), Sound.ENTITY_WARDEN_SONIC_BOOM, 0.4f, 1.5f);
+            }
+        } else {
+            float soundVolume = (float) ((zone.radius + 20.0) / 16.0);
+            zone.center.getWorld().playSound(zone.center, Sound.BLOCK_BEACON_DEACTIVATE, soundVolume, 0.5f);
+            zone.center.getWorld().playSound(zone.center, Sound.ENTITY_WARDEN_SONIC_BOOM, soundVolume * 0.4f, 1.5f);
+        }
 
         // ── ИСПРАВЛЕНИЕ: размораживаем сущности с восстановлением скорости ─
         for (Map.Entry<UUID, Vector> entry : zone.frozenEntities.entrySet()) {

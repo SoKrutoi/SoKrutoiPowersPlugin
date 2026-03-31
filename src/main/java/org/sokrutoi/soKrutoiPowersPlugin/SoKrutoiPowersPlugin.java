@@ -10,6 +10,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.sokrutoi.soKrutoiPowersPlugin.commands.*;
+import org.sokrutoi.soKrutoiPowersPlugin.commands.GiveLuckyArrowCommand;
+import org.sokrutoi.soKrutoiPowersPlugin.commands.PowersHelpCommand;
+import org.sokrutoi.soKrutoiPowersPlugin.listeners.PlayerJoinListener;
 import org.sokrutoi.soKrutoiPowersPlugin.powers.*;
 
 import java.util.*;
@@ -25,6 +28,7 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
 
     private PowerManager  powerManager;
     private NamespacedKey deathNoteKey;
+    private LuckyArrow    luckyArrow;
 
     @Override
     public void onEnable() {
@@ -40,7 +44,20 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
         powerManager.register(new ExplosionPower(this));
         powerManager.register(new ThiefPower(this));
         powerManager.register(new ZaWarudoPower(this));
-        powerManager.register(new FlashPower(this));   // ← новая сила
+        powerManager.register(new FlashPower(this));
+        powerManager.register(new AnchorPower(this));   // ← Якорь
+
+        luckyArrow = new LuckyArrow(this);
+        getServer().getPluginManager().registerEvents(luckyArrow, this);
+
+        GiveLuckyArrowCommand giveLuckyCmd = new GiveLuckyArrowCommand(this);
+        getCommand("giveluckyarrow").setExecutor(giveLuckyCmd);
+        getCommand("giveluckyarrow").setTabCompleter(giveLuckyCmd);
+
+        PowersHelpCommand powersHelpCmd = new PowersHelpCommand(this);
+        getCommand("powers").setExecutor(powersHelpCmd);
+
+        getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
 
         GivePowerCommand givePowerCmd = new GivePowerCommand(this);
         getCommand("givepower").setExecutor(givePowerCmd);
@@ -167,6 +184,7 @@ public class SoKrutoiPowersPlugin extends JavaPlugin {
     public Set<UUID>         getDeathNoteKills() { return deathNoteKills; }
     public PowerManager      getPowerManager()   { return powerManager; }
     public NamespacedKey     getDeathNoteKey()   { return deathNoteKey; }
+    public LuckyArrow        getLuckyArrow()     { return luckyArrow; }
 
     private void loadPendingDeaths() {
         var section = getConfig().getConfigurationSection("pending-deaths");

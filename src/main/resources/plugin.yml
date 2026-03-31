@@ -4,6 +4,7 @@ main: org.sokrutoi.soKrutoiPowersPlugin.SoKrutoiPowersPlugin
 api-version: '1.21'
 description: Супер-силы для сервера SoKrutoi
 
+
 commands:
   givepower:
     description: Выдать суперсилу игроку
@@ -34,6 +35,14 @@ commands:
     usage: /randompowers [сила1] [сила2] ...
     permission: sokrutoi.randompowers
     tab-complete: true
+  giveluckyarrow:
+    description: Выдать Стрелу Судьбы игроку
+    usage: /giveluckyarrow <игрок> [количество]
+    permission: sokrutoi.giveluckyarrow
+    tab-complete: true
+  powers:
+    description: Помощь по плагину суперсил
+    usage: /powers
 
 permissions:
   sokrutoi.givepower:
@@ -53,4 +62,7 @@ permissions:
     default: op
   sokrutoi.randompowers:
     description: Случайная раздача суперсил
+    default: op
+  sokrutoi.giveluckyarrow:
+    description: Выдача Стрелы Судьбы
     default: op

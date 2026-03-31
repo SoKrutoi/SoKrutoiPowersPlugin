@@ -10,12 +10,12 @@ death-warn-seconds: 10
 
 # ── Взрыв ──────────────────────────────
 explosion-charge-seconds: 5
-explosion-power: 4.5
+explosion-power: 4.0
 explosion-break-blocks: true
 explosion-cooldown-seconds: 60
 
 # ── Вор ────────────────────────────────
-thief-cooldown-seconds: 120
+thief-cooldown-seconds: 110
 
 # ── Гигант ─────────────────────────────
 giant:
@@ -39,14 +39,13 @@ giant:
     attack-knockback-add: 2.5
 
 # ── Уменьшение ─────────────────────────
-# Меняются только размер и HP. Скорость, прыжок, дальность — остаются прежними.
 shrink:
   level1:
     scale: 0.5          # половина обычного роста
-    hp-multiplier: 0.5  # половина обычных HP
+    hp-multiplier: 0.75 # половина обычных HP
   level2:
-    scale: 0.1          # почти пиксель (~2 пикселя в высоту — минимум движка)
-    hp-multiplier: 0.25 # четверть обычных HP
+    scale: 0.15         # почти пиксель (~2 пикселя в высоту — минимум движка)
+    hp-multiplier: 0.2  # четверть обычных HP
 
 # ── За Варудо ──────────────────────────
 zawarudo:
@@ -60,6 +59,12 @@ zawarudo:
 flash:
   speed-level: 5                # уровень Speed (1–255; стандартный максимум — 5)
   dash-velocity: 1.8            # сила рывка (множитель вектора взгляда)
-  dash-cooldown-seconds: 1      # кулдаун рывка (секунды) — раньше было 3
+  dash-cooldown-seconds: 3      # кулдаун рывка (секунды)
   step-height-bonus: 1.5        # на сколько блоков выше шагает игрок в режиме флеша
   hunger-interval-ticks: 300    # тики между потерей 1 ед. голода (300 = 15 сек.)
+
+# ── Якорь ──────────────────────────────
+anchor:
+  duration-seconds: 20          # сколько секунд активна способность
+  cooldown-seconds: 60          # кулдаун после возврата (секунды)
+  double-shift-window-ms: 400   # окно двойного шифта (мс)
